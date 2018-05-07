@@ -475,7 +475,7 @@ IsRESNSolvent(string resn){
 bool
 IsRESNIon(string resn){
   const vector<string> ions = {"NA","MG","K", "MN","ZN","BA","CO","3CO","AG","NCO","2HP","ACT",
-                               "CS","CU","NI","PT","RB","SR","TL","BR","NRU","NH4"};
+                               "CS","CU","NI","PT","RB","SR","TL","BR","NRU","NH4","CA","CL"};
   return (find(ions.begin(),ions.end(),resn ) != ions.end());
 }
 
@@ -919,7 +919,9 @@ MOL2parser(string fname,
   result.insert(result.end(),temp.begin(),temp.end());
   GetMolType(result);
   GetAtomType(typefname,result,KeepUnknown);
-  for(auto& atom : result) atom.STRUCTURE = GetBasename(fname);
+  for(auto& atom : result){ 
+    atom.STRUCTURE = GetBasename(fname);
+  }
   return result;
 }
 
@@ -995,14 +997,14 @@ MOL2_parse_map(map<string,vector<string>>& sections,
         }
         else resn_ = tokens[7];
         resn_.erase(resn_.find_last_not_of(" \n\r\t")+1);
-        resn = resn_.substr(0,3);
-        /*for(char& c : resn_){
+        resn_ = resn_.substr(0,3);
+        for(char c : resn_){
           if (!isdigit(c)){
             if (c == '-') break;
             resn += c;
           }
           else break;
-        }*/
+        }
       }
       else resn = "___";
     }   
@@ -1010,6 +1012,7 @@ MOL2_parse_map(map<string,vector<string>>& sections,
     float tf = 0;
     string ele = "";
     if(sybyl2ele.find(type) != sybyl2ele.end()) ele = sybyl2ele[type];
+    else ele = name.substr(0,2);
     atom_struct current_atom(ID,
                              resi,
                              icode,

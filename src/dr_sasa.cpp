@@ -33,9 +33,6 @@ string help = "Usage:\n"
 "Outpus an interaction table and overlap table.\n"
 "EXAMPLE:\n"
 "  ./dr_sasa -m 2 -i 4ins.pdb -chain ABCD\n\n"
-" *Switches\n\n"
-"-nomatrix\tswitch will disable matrix output.\n\n"
-"-r float\tswitch will set the water probe radius in Angstroms. Default value is 1.4. Setting to 0 is equal to using the molecular surface.\n\n"
 " *Atom dSASA mode: (mode 3)\n"
 "Calculates the delta SASA of all atoms inside a single object. (intramolecular contacts)\n"
 "Outpus an interaction table and overlap table.\n"
@@ -44,6 +41,7 @@ string help = "Usage:\n"
 " *Switches\n\n"
 "-nomatrix\tswitch will disable matrix output.\n\n"
 "-r float\tswitch will set the water probe radius in Angstroms. Default value is 1.4. Setting to 0 is equal to using the molecular surface.\n\n"
+"-v\tAllows the user to define their own VdW radii for PDBs or MOL2 files. Examples are distributed under the utils folder.\n\n"
 ;
 
 vector<char>
@@ -351,7 +349,7 @@ int main(int argc, char* argv[])
     string output1 = vsinput+".int_table";
     string output2 = vsinput+".overlaps";
     string output3 = input;
-
+    string output4 = input+".dsasa";
     VDWcontainer rad(vdwfile);
     rad.GenPoints();
     auto pdb = PDBparser(input,types,keepunknown);
@@ -368,7 +366,7 @@ int main(int argc, char* argv[])
 
     //PrintDNA_ProtResultsTable(pdb, output1);
     PrintDNA_ProtResults(pdb, output2);
-
+    PrintDSASAResults(pdb,output4);
     if(mtrx){ 
       PrintDNA_ProtResultsByAtomMatrix(pdb, output3,mtrxtype);
       Print_MatrixInsideAtom(pdb,vsinput);
