@@ -3,6 +3,7 @@
 #include "histogram.h"
 #include "SearchFunctions.h"
 #include <cstdio>
+#include <limits>
 #include "SolverDataProcessing.h"
 
 
@@ -112,7 +113,7 @@ GenerateInterBSAMatrix(vector<atom_struct>&                  pdb,
                         map<vector<string>, vector<string>>& ROWres,
                         map<vector<string>, vector<uint32>>& COLatomtype,
                         map<vector<string>, vector<uint32>>& ROWatomtype ){
-  CalculateDNA_ProtInteractions(pdb);
+  CalculateDNA_ProtInteractions(pdb,0);
   set<string> object_types;
   for (auto& atom : pdb){
     object_types.insert(atom.STRUCT_TYPE);
@@ -188,10 +189,14 @@ GenerateInterBSAMatrix(vector<atom_struct>&                  pdb,
               if(ov.end() != find(ov.begin(),ov.end(),pos)){   //check if this other atom is part of current overlap
                 uint32 col = ColM[aID];                        //current atom position in column
                 uint32 line = LineM[pdb[pos].sID()];           //other atom position in line
-                IcJ[col + line * lm] += atom.ov_norm_area[r];  //sum area to atom matrix
                 uint32 col_res = ColMres[rID];                 //column of current residue 
                 uint32 line_res = LineMres[pdb[pos].rsID()];   //line of current residue
-                IcJres[col_res + line_res * lm_res] += atom.ov_norm_area[r]; //sum area to residue matrix
+                uint64 idxA = col + line * lm;
+                uint64 idxR = col_res + line_res * lm_res;
+                if(std::isnan(IcJ[idxA])) IcJ[idxA] = 0.0;
+                if(std::isnan(IcJres[idxR])) IcJres[idxR] = 0.0;
+                IcJ[idxA] += atom.ov_norm_area[r];  //sum area to atom matrix
+                IcJres[idxR] += atom.ov_norm_area[r]; //sum area to residue matrix
               }
             }
           }
@@ -207,9 +212,13 @@ GenerateInterBSAMatrix(vector<atom_struct>&                  pdb,
               if(ov.end() != find(ov.begin(),ov.end(),pos)){
                 uint32 col = ColM[pdb[pos].sID()];
                 uint32 line = LineM[aID];
-                JcI[col + line * lm] += atom.ov_norm_area[r];
                 uint32 col_res = ColMres[pdb[pos].rsID()];
                 uint32 line_res = LineMres[rID];
+                uint64 idxA = col + line * lm;
+                uint64 idxR = col_res + line_res * lm_res;
+                if(std::isnan(JcI[idxA])) JcI[idxA] = 0.0;
+                if(std::isnan(JcIres[idxR])) JcIres[idxR] = 0.0;
+                JcI[col + line * lm] += atom.ov_norm_area[r];
                 JcIres[col_res + line_res * lm_res] += atom.ov_norm_area[r];
               }
             }
@@ -257,7 +266,7 @@ GenerateIntraBSAMatrix(vector<atom_struct>& pdb,
                        vector<string>&      ROWres,
                        vector<uint32>&      COLatomtype,
                        vector<uint32>&      ROWatomtype ){
-  CalculateDNA_ProtInteractions(pdb);
+  CalculateDNA_ProtInteractions(pdb,0);
   set<string> object_types;
   for (auto& atom : pdb){
     object_types.insert(atom.CHAIN);
@@ -458,7 +467,7 @@ void
 PrintDNA_ProtResultsByAtomMatrix(vector<atom_struct>& pdb,     // pdb struct
                                  string               output, // output filename
                                  int                  mode){  
-  CalculateDNA_ProtInteractions(pdb);
+  CalculateDNA_ProtInteractions(pdb,mode);
   set<string> object_types;
   for (auto& atom : pdb){
     object_types.insert(atom.STRUCT_TYPE);
@@ -537,53 +546,65 @@ PrintDNA_ProtResultsByAtomMatrix(vector<atom_struct>& pdb,     // pdb struct
         string aID = atom.sID();
         string rID = atom.rsID();
         if(atom.STRUCT_TYPE == objA){
-          //cout << "ATOM: " << aID << " " << atom.STRUCT_TYPE << "\n";
+//          cout << "ATOM_A: " << aID << " " << atom.STRUCT_TYPE << "\n";
+//          cout << "ATOM_INT: " << atom.INTERACTION_SASA_P.size() << "\n";
           for(uint32 pos : atom.INTERACTION_SASA_P){
             if (pdb[pos].STRUCT_TYPE != objB) continue;
-            //cout <<"    OBJ_A: " << pdb[pos].sID() << "\n";
+//            cout <<"    OBJ_A: " << pdb[pos].sID() << "\n";
             for (uint32 r = 0; r < atom.ov_table.size(); ++r){ //iterate through this atoms overlap table
               auto& ov = atom.ov_table[r];                     //get vector of atom positions that form this overlap
               if(ov.end() != find(ov.begin(),ov.end(),pos)){   //check if this other atom is part of current overlap
                 uint32 col = ColM[aID];                        //current atom position in column
                 uint32 line = LineM[pdb[pos].sID()];           //other atom position in line
-                IcJ[col + line * lm] += atom.ov_norm_area[r];  //sum area to atom matrix
-                objA_bsa += atom.ov_norm_area[r];
                 uint32 col_res = ColMres[rID];                 //column of current residue 
                 uint32 line_res = LineMres[pdb[pos].rsID()];   //line of current residue
-                IcJres[col_res + line_res * lm_res] += atom.ov_norm_area[r]; //sum area to residue matrix
+                uint64 idxA = col + line * lm;
+                uint64 idxR = col_res + line_res * lm_res;
+                if(std::isnan(IcJ[idxA])) IcJ[idxA] = 0.0;
+                if(std::isnan(IcJres[idxR])) IcJres[idxR] = 0.0;              
+                IcJ[idxA] += atom.ov_norm_area[r];  //sum area to atom matrix
+                IcJres[idxR] += atom.ov_norm_area[r]; //sum area to residue matrix
+                objA_bsa += atom.ov_norm_area[r];
               }
             }
           }
         }
         //same comments as object A
         if(atom.STRUCT_TYPE == objB){
-          //cout << "ATOM: " << atom.sID() << " " << atom.STRUCT_TYPE << "\n";
+//          cout << "ATOM_B: " << atom.sID() << " " << atom.STRUCT_TYPE << "\n";
+//          cout << "ATOM_INT: " << atom.INTERACTION_SASA_P.size() << "\n";
           for(uint32 pos : atom.INTERACTION_SASA_P){
             if (pdb[pos].STRUCT_TYPE != objA) continue;
-            //cout <<"    OBJ_B: " << pdb[pos].sID() << "\n";
+//            cout <<"    OBJ_B: " << pdb[pos].sID() << "\n";
             for (uint32 r = 0; r < atom.ov_table.size(); ++r){
               auto& ov = atom.ov_table[r];
               if(ov.end() != find(ov.begin(),ov.end(),pos)){
                 uint32 col = ColM[pdb[pos].sID()];
                 uint32 line = LineM[aID];
-                JcI[col + line * lm] += atom.ov_norm_area[r];
-                objB_bsa += atom.ov_norm_area[r];
                 uint32 col_res = ColMres[pdb[pos].rsID()];
                 uint32 line_res = LineMres[rID];
-                JcIres[col_res + line_res * lm_res] += atom.ov_norm_area[r];
+                uint64 idxA = col + line * lm;
+                uint64 idxR = col_res + line_res * lm_res;
+                if(std::isnan(JcI[idxA])) JcI[idxA] = 0.0;
+                if(std::isnan(JcIres[idxR])) JcIres[idxR] = 0.0;              
+                JcI[idxA] += atom.ov_norm_area[r];
+                JcIres[idxR] += atom.ov_norm_area[r];
+                objB_bsa += atom.ov_norm_area[r];
               }
             }
           }
         }
       }
+
       if((accumulate(IcJ.begin(),IcJ.end(),0.0) == 0.0) &&
          (accumulate(JcI.begin(),JcI.end(),0.0) == 0.0)){
        //pragma omp critical(log)
-       // {
-          //cerr << "NULL_INTERACTION\tOBJ\t"<< objA << "\t<->\tOBJ\t"<<objB<<"\n";
-        //}
+        {
+         cerr << "NULL_INTERACTION\tOBJ\t"<< objA << "\t<->\tOBJ\t"<<objB<<"\n";
+        }
         continue;
       }
+
       //atom files
       stringstream AcB;                //dSASA in A caused by B outputfilename
       AcB << output << "." <<objA << "_vs_" << objB << ".by_atom.tsv";
@@ -592,8 +613,8 @@ PrintDNA_ProtResultsByAtomMatrix(vector<atom_struct>& pdb,     // pdb struct
       ofstream AcBfile(AcB.str());
       ofstream BcAfile(BcA.str());
 
-      AcBfile << objA << " <- " << objB << "\t"; //dSASA B causes to A
-      BcAfile << objA << " -> " << objB << "\t"; //dSASA A causes to B
+      AcBfile << objA << "<-" << objB <<"/SUM-v" << "\t"; //dSASA B causes to A
+      BcAfile << objA << "->" << objB << "/SUM->" <<"\t"; //dSASA A causes to B
       
       for (uint s = 0; s < ColL.size(); ++s) {
 
@@ -624,8 +645,8 @@ PrintDNA_ProtResultsByAtomMatrix(vector<atom_struct>& pdb,     // pdb struct
       ofstream AcBfileres(AcBres.str());
       ofstream BcAfileres(BcAres.str());
 
-      AcBfileres << objA << "<-" << objB << "\t"; //dSASA B causes to A
-      BcAfileres << objA << "->" << objB << "\t"; //dSASA A causes to B
+      AcBfileres << objA << "<-" << objB << "/SUM-v"<< "\t"; //dSASA B causes to A
+      BcAfileres << objA << "->" << objB <<"/SUM->" <<"\t"; //dSASA A causes to B
       for (auto s : ColLres) {
         AcBfileres << s << "\t";
         BcAfileres << s << "\t";
@@ -645,10 +666,12 @@ PrintDNA_ProtResultsByAtomMatrix(vector<atom_struct>& pdb,     // pdb struct
       AcBfileres.close();
       BcAfileres.close();
       //log to stdout
-      cout << "Object " << objA << " complexed surface (A^2):\t" << objA_sasa << std::endl;
-      cout << "Object " << objB << " complexed surface (A^2):\t" << objB_sasa << std::endl; 
-      cout << "Object " << objA << " uncomplexed surface (A^2):\t" << (objA_sasa+objA_bsa) << std::endl;
-      cout << "Object " << objB << " uncomplexed surface (A^2):\t" << (objB_sasa+objB_bsa) << std::endl; 
+      if(mode == 0){
+        cout << "Object " << objA << " complexed surface (A^2):\t" << objA_sasa << std::endl;
+        cout << "Object " << objB << " complexed surface (A^2):\t" << objB_sasa << std::endl;
+        cout << "Object " << objA << " uncomplexed surface (A^2):\t" << (objA_sasa+objA_bsa) << std::endl;
+        cout << "Object " << objB << " uncomplexed surface (A^2):\t" << (objB_sasa+objB_bsa) << std::endl;
+      }
       cout << objA << " <--- " << objB << " buried surface (A^2):\t" << objA_bsa  << std::endl;
       cout << objA << " ---> " << objB << " buried surface (A^2):\t" << objB_bsa  << std::endl;
       cout << "Interface "<< objA << "/" << objB << " (A^2):\t" << ((objA_bsa+objB_bsa) / 2.0)  << std::endl;
@@ -658,8 +681,9 @@ PrintDNA_ProtResultsByAtomMatrix(vector<atom_struct>& pdb,     // pdb struct
 
 void
 Print_MatrixInsideAtom(vector<atom_struct>& pdb,
-                       string               output){
-  CalculateDNA_ProtInteractions(pdb);
+                       string               output,
+                       int                  mode){
+  CalculateDNA_ProtInteractions(pdb,mode);
   set<string> object_types;
   for (auto& atom : pdb){
     object_types.insert(atom.CHAIN);
@@ -703,8 +727,8 @@ Print_MatrixInsideAtom(vector<atom_struct>& pdb,
   for (uint32 k = 0; k < ColLres.size();++k) ColMres[ColLres[k]] = k;
   for (uint32 k = 0; k < LineLres.size();++k) LineMres[LineLres[k]] = k;
   
-  mtrx.resize(ColL.size()*LineL.size(),0.0);
-  mtrx_res.resize(ColLres.size()*LineLres.size(),0.0);
+  mtrx.resize(ColL.size()*LineL.size(),NAN);
+  mtrx_res.resize(ColLres.size()*LineLres.size(),NAN);
   uint32 lm = ColL.size();
   uint32 lm_res = ColLres.size();
 //pragma omp parallel for schedule(dynamic)
@@ -715,17 +739,22 @@ Print_MatrixInsideAtom(vector<atom_struct>& pdb,
    //cout << "ATOM: " << aID << " " << atom.STRUCT_TYPE << "\n";
    for(uint32 pos : atom.INTERACTION_SASA_P){
       //cout <<"    OBJ_A: " << pdb[pos].sID() << "\n";
+        uint32 col = ColM[aID];
+        uint32 line = LineM[pdb[pos].sID()];
+        uint32 col_res = ColMres[rID];
+        uint32 line_res = LineMres[pdb[pos].rsID()];
+        uint64 idxR = col_res + line_res * lm_res;
+        uint64 idxA = col + line * lm;
+        if(std::isnan(mtrx_res[idxR])) mtrx_res[idxR] = 0.0;
+        if(std::isnan(mtrx[idxA])) mtrx[idxA] = 0.0;
+
       for (uint32 r = 0; r < atom.ov_table.size(); ++r){
         auto& ov = atom.ov_table[r];
         if(ov.end() != find(ov.begin(),ov.end(),pos)){
-          uint32 col = ColM[aID];
-          uint32 line = LineM[pdb[pos].sID()];
-          uint32 col_res = ColMres[rID];
-          uint32 line_res = LineMres[pdb[pos].rsID()];
           //pragma omp critical(printatommatrix)
           {
-          mtrx_res[col_res + line_res * lm_res] += atom.ov_norm_area[r];
-          mtrx[col + line * lm] += atom.ov_norm_area[r];
+          mtrx_res[idxR] += atom.ov_norm_area[r];
+          mtrx[idxA] += atom.ov_norm_area[r];
           }
         }
       }
@@ -864,7 +893,8 @@ PrintSASAResults(vector<atom_struct>& pdb,
     outf << std::setw(8) << std::fixed << std::setprecision(3) << atom_i.COORDS[2];
     //outf << "  1.00";
     outf << std::right << std::setw(6) << std::fixed << std::setprecision(2) << atom_i.VDW;
-    outf << std::setw(6) << std::fixed << std::setprecision(2) << atom_i.SASA; 
+    if (atom_i.SASA > 100.0) outf << std::setw(6) << std::fixed << std::setprecision(1) << atom_i.SASA;
+    else                     outf << std::setw(6) << std::fixed << std::setprecision(2) << atom_i.SASA;
     //outf << "          ";
     outf <<" ";
     outf << std::left << std::setw(8) << atom_i.MOL_TYPE;
@@ -923,7 +953,9 @@ PrintDSASAResults(vector<atom_struct>& pdb,
     outf << std::setw(8) << std::fixed << std::setprecision(3) << atom_i.COORDS[2];
     //outf << "  1.00";
     outf << std::right << std::setw(6) << std::fixed << std::setprecision(2) << atom_i.VDW;
-    outf << std::setw(6) << std::fixed << std::setprecision(2) << atom_i.EXT0; 
+    if (atom_i.EXT0 > 100.0) outf << std::setw(6) << std::fixed << std::setprecision(1) << atom_i.EXT0;
+    else                     outf << std::setw(6) << std::fixed << std::setprecision(2) << atom_i.EXT0;
+ 
     //outf << "          ";
     outf <<" ";
     outf << std::left << std::setw(8) << atom_i.MOL_TYPE;
@@ -1019,7 +1051,7 @@ PrintSASAone_type_(vector<atom_struct>& pdb,         //pdb struct
 }*/
 
 void
-CalculateDNA_ProtInteractions(vector<atom_struct>& pdb){
+CalculateDNA_ProtInteractions(vector<atom_struct>& pdb,int mode){
 //pragma omp parallel for schedule(dynamic)
   for (uint32 pos = 0; pos < pdb.size(); ++pos){
     auto& atom_i = pdb[pos];
@@ -1041,7 +1073,8 @@ CalculateDNA_ProtInteractions(vector<atom_struct>& pdb){
     for (uint32 i = 0; i < atom_i.AREA_BURIED_BY_ATOM_vector.size(); ++i){
       for (uint32 k = 0; k < atom_i.AREA_BURIED_BY_ATOM_vector[i].size(); ++k){
         uint32 other = atom_i.AREA_BURIED_BY_ATOM_vector[i][k];
-        if (interac_pos.end() == find(interac_pos.begin(), interac_pos.end(), other)) valid_overlaps[i] = false;
+        if(mode == 0) 
+          if (interac_pos.end() == find(interac_pos.begin(), interac_pos.end(), other)) valid_overlaps[i] = false;
       }
       if (!valid_overlaps[i]) continue;
       atom_i.AREA_BURIED_BY_ATOM_vector_valid.push_back(i);
@@ -1059,14 +1092,29 @@ CalculateDNA_ProtInteractions(vector<atom_struct>& pdb){
         vector<uint32> overlap;
         for (uint32 j = 0; j < overlaps; ++j){
           overlap.push_back(atom_i.AREA_BURIED_BY_ATOM_vector[i][j]);
-          //cout << atom_i.AREA_BURIED_BY_ATOM_vector[i][j] << " ";
+       //   cout << atom_i.AREA_BURIED_BY_ATOM_vector[i][j] << " ";
         }
         ov_table.push_back(overlap);
         ov_table_area.push_back(atom_i.AREA_BURIED_BY_ATOM_area[i]);
         ov_norm_area.push_back((float)atom_i.AREA_BURIED_BY_ATOM_area[i]/(float)overlap.size());
-        //cout << atom_i.AREA_BURIED_BY_ATOM_area[i] << std::endl;
+       // cout << atom_i.AREA_BURIED_BY_ATOM_area[i] << std::endl;
       }
     }
+/*    for (auto vec : ov_table){
+      cout << pdb[pos].NAME << " " << pdb[pos].RESN;
+      for (auto v : vec){
+        cout << " " << v;
+      }
+      cout << "\n";
+
+      }
+    cout << "ov_area";
+    for (auto v: ov_table_area) cout << " " << v ;
+    cout << "\n";
+    cout << "ov_norm";
+    for (auto v: ov_norm_area) cout << " " <<v ;
+    cout << "\n";
+*/
   }
 }
 
@@ -1908,8 +1956,8 @@ PrintSplitAsaAtom(vector<atom_struct>& pdb,
                     {"DT",{}},
                     {"U",{}}}; // RNA
 
-  const char* formatS = "%s\t%s\t%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f";
-  string header = "atmname\tresname\tchain\tresnum\ttotal_ASA\tbb_ASA\tsc_ASA\tmajorgroove_ASA\tminorgroove_ASA\tnogroove_ASA\tpolar_ASA\tpolar_bb_ASA\tpolar_sc_ASA\tpolar_majorgroove_ASA\tpolar_minorgroove_ASA\tpolar_nogroove_ASA\thyd_ASA\thyd_bb_ASA\thyd_sc_ASA\thyd_majorgroove_ASA\thyd_minorgroove_ASA\thyd_nogroove_ASA\tlig_ASA\tlig_polar_ASA\tlig_hyd_ASA\tX\tY\tZ";
+  const char* formatS = "%s\t%s\t%d\t%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f";
+  string header = "atmname\tresname\tchain\tresnum\tID\ttotal_ASA\tbb_ASA\tsc_ASA\tmajorgroove_ASA\tminorgroove_ASA\tnogroove_ASA\tpolar_ASA\tpolar_bb_ASA\tpolar_sc_ASA\tpolar_majorgroove_ASA\tpolar_minorgroove_ASA\tpolar_nogroove_ASA\thyd_ASA\thyd_bb_ASA\thyd_sc_ASA\thyd_majorgroove_ASA\thyd_minorgroove_ASA\thyd_nogroove_ASA\tlig_ASA\tlig_polar_ASA\tlig_hyd_ASA\tX\tY\tZ";
   //ligands total, polar(O,N) and hydrophobic(everything else).
   string obj_name = pdb[0].STRUCTURE;
 #ifdef WIN32__
@@ -1940,57 +1988,71 @@ PrintSplitAsaAtom(vector<atom_struct>& pdb,
     else if (data[i].MOL_TYPE == "LIGAND") ligd.push_back(data+i);
     else if (data[i].EXT1 > 0.0) bsa.push_back(data+i);
   }*/
-  float total_ASA,bb_ASA,sc_ASA,majorgroove_ASA,minorgroove_ASA,nogroove_ASA,polar_ASA,polar_bb_ASA,polar_sc_ASA,polar_majorgroove_ASA,polar_minorgroove_ASA,polar_nogroove_ASA,hyd_ASA,hyd_bb_ASA,hyd_sc_ASA,hyd_majorgroove_ASA,hyd_minorgroove_ASA,hyd_nogroove_ASA,lig_ASA,lig_polar_ASA,lig_hyd_ASA;
-  auto opdb = OrganizePDB(pdb);
+    auto opdb = OrganizePDB(pdb);
   for(auto& chain : opdb){
     for(auto& res : chain){
       for(auto& atom : res){
-        total_ASA = 0.0;
-        bb_ASA = 0.0;
-        sc_ASA = 0.0;
-        majorgroove_ASA = 0.0;
-        minorgroove_ASA = 0.0;
-        nogroove_ASA = 0.0;
-        polar_ASA = 0.0;
-        polar_bb_ASA = 0.0;
-        polar_sc_ASA = 0.0;
-        polar_majorgroove_ASA = 0.0;
-        polar_minorgroove_ASA = 0.0;
-        polar_nogroove_ASA = 0.0;
-        hyd_ASA = 0.0;
-        hyd_bb_ASA = 0.0;
-        hyd_sc_ASA = 0.0;
-        hyd_majorgroove_ASA = 0.0;
-        hyd_minorgroove_ASA = 0.0;
-        hyd_nogroove_ASA = 0.0;
-        lig_ASA = 0.0;
-        lig_polar_ASA = 0.0;
-        lig_hyd_ASA = 0.0;
-        bool found = false;
+        float total_ASA,bb_ASA,sc_ASA,majorgroove_ASA,minorgroove_ASA,nogroove_ASA,polar_ASA,polar_bb_ASA,polar_sc_ASA,polar_majorgroove_ASA,polar_minorgroove_ASA,polar_nogroove_ASA,hyd_ASA,hyd_bb_ASA,hyd_sc_ASA,hyd_majorgroove_ASA,hyd_minorgroove_ASA,hyd_nogroove_ASA,lig_ASA,lig_polar_ASA,lig_hyd_ASA;
+
+        total_ASA = NAN;
+        bb_ASA = NAN;
+        sc_ASA = NAN;
+        majorgroove_ASA = NAN;
+        minorgroove_ASA = NAN;
+        nogroove_ASA = NAN;
+        polar_ASA = NAN;
+        polar_bb_ASA = NAN;
+        polar_sc_ASA = NAN;
+        polar_majorgroove_ASA = NAN;
+        polar_minorgroove_ASA = NAN;
+        polar_nogroove_ASA = NAN;
+        hyd_ASA = NAN;
+        hyd_bb_ASA = NAN;
+        hyd_sc_ASA = NAN;
+        hyd_majorgroove_ASA = NAN;
+        hyd_minorgroove_ASA = NAN;
+        hyd_nogroove_ASA = NAN;
+        lig_ASA = NAN;
+        lig_polar_ASA = NAN;
+        lig_hyd_ASA = NAN;
         if(find(amino_acids.begin(),amino_acids.end(),atom->RESN) != amino_acids.end()){
           if(find(aa_backbone.begin(),aa_backbone.end(),atom->NAME) != aa_backbone.end()){
-            found = true;
+            if(std::isnan(total_ASA)) total_ASA = 0.0;
+            if(std::isnan(bb_ASA)) bb_ASA = 0.0;
+            
             total_ASA += atom->SASA;
             bb_ASA += atom->SASA;
           }
           else if(find(aa_sidechain.begin(),aa_sidechain.end(),atom->NAME) != aa_sidechain.end()){
-            found = true;
+            if(std::isnan(total_ASA)) total_ASA = 0.0;
+            if(std::isnan(sc_ASA)) sc_ASA = 0.0;
+            
             total_ASA += atom->SASA;
             sc_ASA += atom->SASA;
           }
           if(find(aa_polar_backbone.begin(),aa_polar_backbone.end(),atom->NAME) != aa_polar_backbone.end()){
+            if(std::isnan(polar_ASA)) polar_ASA = 0.0;
+            if(std::isnan(polar_bb_ASA)) polar_bb_ASA = 0.0;
+ 
             polar_ASA += atom->SASA;
             polar_bb_ASA += atom->SASA;
           }
           else if(find(aa_polar_sidechain.begin(),aa_polar_sidechain.end(),atom->NAME) != aa_polar_sidechain.end()){
+            if(std::isnan(polar_ASA)) polar_ASA = 0.0;
+            if(std::isnan(polar_sc_ASA)) polar_sc_ASA = 0.0;
+
             polar_ASA += atom->SASA;
             polar_sc_ASA += atom->SASA;
           }
           if(find(aa_hyd_backbone.begin(),aa_hyd_backbone.end(),atom->NAME) != aa_hyd_backbone.end()){
+            if(std::isnan(hyd_ASA)) hyd_ASA = 0.0;
+            if(std::isnan(hyd_bb_ASA)) hyd_bb_ASA = 0.0;
             hyd_ASA += atom->SASA;
             hyd_bb_ASA += atom->SASA;
           }
           else if(find(aa_hyd_sidechain.begin(),aa_hyd_sidechain.end(),atom->NAME) != aa_hyd_sidechain.end()){
+            if(std::isnan(hyd_ASA)) hyd_ASA = 0.0;
+            if(std::isnan(hyd_sc_ASA)) hyd_sc_ASA = 0.0;
             hyd_ASA += atom->SASA;
             hyd_sc_ASA += atom->SASA;
           }
@@ -2001,83 +2063,118 @@ PrintSplitAsaAtom(vector<atom_struct>& pdb,
           else resname2 = atom->RESN;
 
           if(find(dna_backbone.begin(),dna_backbone.end(),atom->NAME) != dna_backbone.end()){
-            found = true;
+            if(std::isnan(total_ASA)) total_ASA = 0.0;
+            if(std::isnan(bb_ASA)) bb_ASA = 0.0;
             total_ASA += atom->SASA;
             bb_ASA+= atom->SASA;
           }
           else if(find(dna_majorgroove[resname2].begin(),dna_majorgroove[resname2].end(),atom->NAME) != dna_majorgroove[resname2].end()){
-            found = true;
+            if(std::isnan(total_ASA)) total_ASA = 0.0;
+            if(std::isnan(sc_ASA)) sc_ASA = 0.0;
+            if(std::isnan(majorgroove_ASA)) majorgroove_ASA = 0.0;
+
             total_ASA += atom->SASA;
             sc_ASA += atom->SASA;
             majorgroove_ASA += atom->SASA;
           }
           else if(find(dna_minorgroove[resname2].begin(),dna_minorgroove[resname2].end(),atom->NAME) != dna_minorgroove[resname2].end()){
-            found = true;
+            if(std::isnan(total_ASA)) total_ASA = 0.0;
+            if(std::isnan(sc_ASA)) sc_ASA = 0.0;
+            if(std::isnan(minorgroove_ASA)) minorgroove_ASA = 0.0;
             total_ASA += atom->SASA;
             sc_ASA += atom->SASA;
             minorgroove_ASA += atom->SASA;
           }
           else if(find(dna_ambiguous[resname2].begin(),dna_ambiguous[resname2].end(),atom->NAME) != dna_ambiguous[resname2].end()){
-            found = true;
+            if(std::isnan(total_ASA)) total_ASA = 0.0;
+            if(std::isnan(sc_ASA)) sc_ASA = 0.0;
+            if(std::isnan(nogroove_ASA)) nogroove_ASA = 0.0;
             total_ASA += atom->SASA;
             sc_ASA += atom->SASA;
             nogroove_ASA += atom->SASA;
           }
           if(find(dna_polar_backbone.begin(),dna_polar_backbone.end(),atom->NAME) != dna_polar_backbone.end()){
+            if(std::isnan(polar_ASA)) polar_ASA = 0.0;
+            if(std::isnan(polar_bb_ASA)) polar_bb_ASA = 0.0;
             polar_ASA += atom->SASA;
             polar_bb_ASA += atom->SASA;
           }
           else if(find(dna_polar_majorgroove[resname2].begin(),dna_polar_majorgroove[resname2].end(),atom->NAME) != dna_polar_majorgroove[resname2].end()){
+            if(std::isnan(polar_ASA)) polar_ASA = 0.0;
+            if(std::isnan(polar_sc_ASA)) polar_sc_ASA = 0.0;
+            if(std::isnan(polar_majorgroove_ASA)) polar_majorgroove_ASA = 0.0;
             polar_ASA += atom->SASA;
             polar_sc_ASA += atom->SASA;
             polar_majorgroove_ASA += atom->SASA;
           }
           else if(find(dna_polar_minorgroove[resname2].begin(),dna_polar_minorgroove[resname2].end(),atom->NAME) != dna_polar_minorgroove[resname2].end()){
+            if(std::isnan(polar_ASA)) polar_ASA = 0.0;
+            if(std::isnan(polar_sc_ASA)) polar_sc_ASA = 0.0;
+            if(std::isnan(polar_minorgroove_ASA)) polar_minorgroove_ASA = 0.0;
             polar_ASA += atom->SASA;
             polar_sc_ASA += atom->SASA;
             polar_minorgroove_ASA += atom->SASA;
           }
           else if(find(dna_polar_ambiguous[resname2].begin(),dna_polar_ambiguous[resname2].end(),atom->NAME) != dna_polar_ambiguous[resname2].end()){
+            if(std::isnan(polar_ASA)) polar_ASA = 0.0;
+            if(std::isnan(polar_sc_ASA)) polar_sc_ASA = 0.0;
+            if(std::isnan(polar_nogroove_ASA)) polar_nogroove_ASA = 0.0;
             polar_ASA += atom->SASA;
             polar_sc_ASA += atom->SASA;
             polar_nogroove_ASA += atom->SASA;
           }
           
           if(find(dna_hyd_backbone.begin(),dna_hyd_backbone.end(),atom->NAME) != dna_hyd_backbone.end()){
+            if(std::isnan(hyd_ASA)) hyd_ASA = 0.0;
+            if(std::isnan(hyd_bb_ASA)) hyd_bb_ASA = 0.0;
             hyd_ASA += atom->SASA;
             hyd_bb_ASA += atom->SASA;
           }
           else if(find(dna_hyd_majorgroove[resname2].begin(),dna_hyd_majorgroove[resname2].end(),atom->NAME) != dna_hyd_majorgroove[resname2].end()){
+            if(std::isnan(hyd_ASA)) hyd_ASA = 0.0;
+            if(std::isnan(hyd_sc_ASA)) hyd_sc_ASA = 0.0;
+            if(std::isnan(hyd_majorgroove_ASA)) hyd_majorgroove_ASA = 0.0;
             hyd_ASA += atom->SASA;
             hyd_sc_ASA += atom->SASA;
             hyd_majorgroove_ASA += atom->SASA;
           }
           else if(find(dna_hyd_minorgroove[resname2].begin(),dna_hyd_minorgroove[resname2].end(),atom->NAME) != dna_hyd_minorgroove[resname2].end()){
+            if(std::isnan(hyd_ASA)) hyd_ASA = 0.0;
+            if(std::isnan(hyd_sc_ASA)) hyd_sc_ASA = 0.0;
+            if(std::isnan(hyd_minorgroove_ASA)) hyd_minorgroove_ASA = 0.0;
             hyd_ASA += atom->SASA;
             hyd_sc_ASA += atom->SASA;
             hyd_minorgroove_ASA += atom->SASA;
           }
           else if(find(dna_hyd_ambiguous[resname2].begin(),dna_hyd_ambiguous[resname2].end(),atom->NAME) != dna_hyd_ambiguous[resname2].end()){
+            if(std::isnan(hyd_ASA)) hyd_ASA = 0.0;
+            if(std::isnan(hyd_sc_ASA)) hyd_sc_ASA = 0.0;
+            if(std::isnan(hyd_nogroove_ASA)) hyd_nogroove_ASA = 0.0;
             hyd_ASA += atom->SASA;
             hyd_sc_ASA += atom->SASA;
             hyd_nogroove_ASA += atom->SASA;
           }
         }
         else if (atom->MOL_TYPE == "LIGAND"){
+          if(std::isnan(total_ASA)) total_ASA = 0.0;
           total_ASA += atom->SASA;
           if(atom->ELEMENT == "C")
           {
+            if(std::isnan(lig_ASA)) lig_ASA = 0.0;
+            if(std::isnan(lig_hyd_ASA)) lig_hyd_ASA = 0.0;
             lig_ASA += atom->SASA;
             lig_hyd_ASA += atom->SASA;
           }
           else{
+            if(std::isnan(lig_ASA)) lig_ASA = 0.0;
+            if(std::isnan(lig_polar_ASA)) lig_polar_ASA = 0.0;
             lig_ASA += atom->SASA;
             lig_polar_ASA += atom->SASA;
           }
         }
         outf << atom->NAME << "\t";
         char buffer[8192];
-        snprintf(buffer,8192,formatS,atom->RESN.c_str(),atom->CHAIN.c_str(),atom->RESI,total_ASA,bb_ASA,sc_ASA,majorgroove_ASA,minorgroove_ASA,nogroove_ASA,polar_ASA,polar_bb_ASA,polar_sc_ASA,polar_majorgroove_ASA,polar_minorgroove_ASA,polar_nogroove_ASA,hyd_ASA,hyd_bb_ASA,hyd_sc_ASA,hyd_majorgroove_ASA,hyd_minorgroove_ASA,hyd_nogroove_ASA,lig_ASA,lig_polar_ASA,lig_hyd_ASA,atom->COORDS[0],atom->COORDS[1],atom->COORDS[2]);
+        snprintf(buffer,8192,formatS,atom->RESN.c_str(),atom->CHAIN.c_str(),atom->RESI,atom->ID,total_ASA,bb_ASA,sc_ASA,majorgroove_ASA,minorgroove_ASA,nogroove_ASA,polar_ASA,polar_bb_ASA,polar_sc_ASA,polar_majorgroove_ASA,polar_minorgroove_ASA,polar_nogroove_ASA,hyd_ASA,hyd_bb_ASA,hyd_sc_ASA,hyd_majorgroove_ASA,hyd_minorgroove_ASA,hyd_nogroove_ASA,lig_ASA,lig_polar_ASA,lig_hyd_ASA,atom->COORDS[0],atom->COORDS[1],atom->COORDS[2]);
         string data = string(buffer);
         outf << data << std::endl;
       }

@@ -12,14 +12,14 @@
 #include "SearchFunctions.h"
 //#include "ShapeComplementarity.h"
 
-string help = "Usage:\n"
-" *Simple SASA solver: (mode 0, default)\n"
+string help = "\x1b[1mUSAGE:\x1b[0m\n"
+" \x1b[1m*Simple SASA solver: (mode 0, default)\x1b[0m\n"
 "Calculates SASA and outputs a NACCESS PDB like file and a second file with categorized atoms.\n"
 "Outputs just add a .asa and .atmasa to the input filename if not defined by the user.\n"
 "The .asa file has the SASA values in the B-factor column, and a internal atom typing in the charge column reserved for future use.\n"
 "EXAMPLE:\n"
-"  ./dr_sasa -m 0 -i 4ins.pdb -o 4ins.asa\n\n "
-" *Delta SASA by chain ID or automatic: (mode 1)\n"
+"  ./dr_sasa -m 0 -i 4ins.pdb -o 4ins.asa\n\n"
+" \x1b[1m*Delta SASA by chain ID or automatic: (mode 1)\x1b[0m\n"
 "Calculates the delta SASA in various objects contained in a single pdb or mol2 file.\n"
 "Objects are currently defined only by their chains.\n"
 "Outputs an interaction table, all surface overlaps, and a dSASA matrix for each\n"
@@ -28,20 +28,27 @@ string help = "Usage:\n"
 "EXAMPLE:\n"
 "  ./dr_sasa -m 1 -i 4ins.pdb -chain AB -chain CD\n\n"
 "  ./dr_sasa -m 1 -i 1bl0.pdb\n\n"
-" *Aminoacid dSASA mode: (mode 2)\n"
+" \x1b[1m*Aminoacid dSASA mode: (mode 2)\x1b[0m\n"
 "Calculates the delta SASA of all aminoacids inside a single object. (intramolecular contacts)\n"
 "Outpus an interaction table and overlap table.\n"
 "EXAMPLE:\n"
 "  ./dr_sasa -m 2 -i 4ins.pdb -chain ABCD\n\n"
-" *Atom dSASA mode: (mode 3)\n"
+" \x1b[1m*Atom dSASA mode: (mode 3)\x1b[0m\n"
 "Calculates the delta SASA of all atoms inside a single object. (intramolecular contacts)\n"
 "Outpus an interaction table and overlap table.\n"
 "EXAMPLE:\n"
 "  ./dr_sasa -m 3 -i 4ins.pdb -chain ABCD\n\n"
+" \x1b[1m*Atom contact surface mode: (mode -1)\x1b[0m\n"
+"Calculates the contact surface between all the chains of a defined object, or if no chains are defined, between different molecular types.\n"
+"Outpus interaction tables.\n"
+"EXAMPLE:\n"
+"  ./dr_sasa -m -1 -i 1bl0.pdb\n\n"
 " *Switches\n\n"
 "-nomatrix\tswitch will disable matrix output.\n\n"
 "-r float\tswitch will set the water probe radius in Angstroms. Default value is 1.4. Setting to 0 is equal to using the molecular surface.\n\n"
 "-v\tAllows the user to define their own VdW radii for PDBs or MOL2 files. Examples are distributed under the utils folder.\n\n"
+
+
 ;
 
 vector<char>
@@ -112,7 +119,7 @@ MatrixAND(vector<char>& Imtrx1,
 int main(int argc, char* argv[])
 {
   //control variables
-  uint32 mode = 0;
+  int mode = 0;
   uint32 maxin = 8;
   uint32 maxout = 8;
   uint32 outs = 0;
@@ -368,13 +375,69 @@ int main(int argc, char* argv[])
     PrintDNA_ProtResults(pdb, output2);
     PrintDSASAResults(pdb,output4);
     if(mtrx){ 
-      PrintDNA_ProtResultsByAtomMatrix(pdb, output3,mtrxtype);
-      Print_MatrixInsideAtom(pdb,vsinput);
+      PrintDNA_ProtResultsByAtomMatrix(pdb, output3,0);
+      Print_MatrixInsideAtom(pdb,vsinput,0);
     }
 
     return 0;
   }
- 
+ //Generic structure dSASA decoupled
+  if(mode == -1){
+    int Imode = -1;
+    if (chain_sep.size() <= 1){
+      Imode = 2;
+      cout << "#Automatic molecular contact solver selected.\n";
+    }
+    else{
+      Imode = 3;
+      cout << "#Automatic chain contact solver selected.\n";
+    } 
+    stringstream stdinput;
+    stdinput << inputs[0];
+    if(chain_sep.size() == 1){
+      stdinput << ".";
+      for (uint32 i = 0; i < chain_sep.size(); ++i){
+        for (auto c : chain_sep[i]){
+          stdinput << c;
+        }
+        if (i < chain_sep.size() - 1) stdinput << "_vs_";
+      }
+    }
+    else if (chain_sep.size() >= 2){
+      stdinput << ".";
+      for (uint32 i = 0; i < chain_sep.size(); ++i){
+        for (auto c : chain_sep[i]){
+          stdinput << c;
+        }
+        if (i < chain_sep.size() - 1) stdinput << "_vs_";
+      }
+    }
+    string vsinput = stdinput.str();
+    string input = inputs[0];
+    string output1 = vsinput+".int_table";
+    string output2 = vsinput+".overlaps";
+    string output3 = input;
+    string output4 = input+".dsasa";
+    VDWcontainer rad(vdwfile);
+    rad.GenPoints();
+    auto pdb = PDBparser(input,types,keepunknown);
+    //
+    //for(auto item : pdb) cout << item.print() << "\n";
+    //
+    if(chain_sep.size() >= 1) ChainSelector(chain_sep,pdb);
+
+    rad.SetRadius(pdb, probe);
+    SolveInteractions(pdb,Imode);
+    DecoupledSolver(pdb,rad.Points);
+    PrintDNA_ProtResults(pdb, output2);
+    PrintDSASAResults(pdb,output4);
+    if(mtrx) {
+      PrintDNA_ProtResultsByAtomMatrix(pdb, output3,1);
+      Print_MatrixInsideAtom(pdb,vsinput,1);
+    }
+    return 0;
+  }
+
 
 //dSASA inside aminoacids mode
   if(mode == 2){
@@ -409,7 +472,7 @@ int main(int argc, char* argv[])
 
     //PrintDNA_ProtResultsTable(pdb, output1);
    
-    if(mtrx)Print_MatrixInsideAtom(pdb,vsinput);
+    if(mtrx)Print_MatrixInsideAtom(pdb,vsinput,0);
     else PrintDNA_ProtResults(pdb, output2);
     return 0;
   }
@@ -445,7 +508,7 @@ int main(int argc, char* argv[])
     GeneratePairInteractionData(pdb);
 
     //PrintDNA_ProtResultsTable(pdb, output1);
-    if(mtrx)Print_MatrixInsideAtom(pdb,vsinput);
+    if(mtrx)Print_MatrixInsideAtom(pdb,vsinput,0);
     else PrintDNA_ProtResults(pdb, output2);
     return 0;
   }
